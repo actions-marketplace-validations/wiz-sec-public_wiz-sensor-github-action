@@ -4,10 +4,13 @@ const { spawn } = require("child_process");
 const STARTED_STATE_KEY = "WIZ_SENSOR_STARTED";
 const CONTAINER_ID_STATE_KEY = "WIZ_SENSOR_CONTAINER_ID";
 const DEBUG_LOGS_STATE_KEY = "WIZ_SENSOR_DEBUG_LOGS";
+const GENERATE_SUPPORT_PACKAGE_STATE_KEY = "WIZ_SENSOR_GENERATE_SUPPORT_PACKAGE";
+const SUCCESS_STATE_KEY = "WIZ_SENSOR_SUCCESS";
+const SKIPPED_STATE_KEY = "WIZ_SENSOR_SKIPPED";
 const DEFAULT_SENSOR_REGISTRY_URL = "wizio.azurecr.io";
 const DEFAULT_SENSOR_IMAGE_NAME = "sensor";
 const DEFAULT_SENSOR_CONTAINER_NAME = "wiz-sensor";
-const ACTION_VERSION = "0.9.3";
+const ACTION_VERSION = "0.9.5";
 
 let debugLogsEnabled = false;
 
@@ -224,6 +227,7 @@ function getInputs() {
   resolved.backendEnv = getTrimmedInput("backend-env", "prod");
   resolved.waitForReady = parseBooleanInput(getInput("wait-for-ready", "true"));
   resolved.debugLogs = parseBooleanInput(getInput("debug-logs", "false"));
+  resolved.generateSupportPackage = parseBooleanInput(getInput("generate-support-package", "false"));
   resolved.extraEnv = parseExtraEnv(getRawInput("extra-env"));
   resolved.sensorRegistryUrl = getTrimmedInput("sensor-registry-url", DEFAULT_SENSOR_REGISTRY_URL);
   resolved.sensorImageName = getTrimmedInput("sensor-image-name", DEFAULT_SENSOR_IMAGE_NAME);
@@ -401,12 +405,14 @@ async function waitForSensorReady(containerId) {
 async function runMain() {
   if (!isLinuxRunner()) {
     emitNotice(`Wiz Sensor action runs only on Linux runners. Skipping on ${process.env.RUNNER_OS || "unknown"}.`);
+    saveState(SKIPPED_STATE_KEY, "true");
     return;
   }
 
   // install-only mode only pulls and caches the image, so platform-specific
   // start checks (e.g. self-hosted handling) do not apply.
   const installOnly = parseBooleanInput(getInput("install-only", "false"));
+  const allowSelfHosted = parseBooleanInput(getInput("allow-self-hosted", "false"));
 
   if (!installOnly && isSelfHostedRunner()) {
     if (await hasInstalledSelfHostedSensor()) {
@@ -414,8 +420,10 @@ async function runMain() {
       return;
     }
 
-    emitWarning("Wiz Sensor action is supported only on GitHub-hosted runners. Skipping on self-hosted runner.");
-    return;
+    if (!allowSelfHosted) {
+      emitWarning("Wiz Sensor action is supported only on GitHub-hosted runners. Skipping on self-hosted runner.");
+      return;
+    }
   }
 
   const inputs = getInputs();
@@ -452,12 +460,15 @@ async function runMain() {
   saveState(STARTED_STATE_KEY, "true");
   saveState(CONTAINER_ID_STATE_KEY, containerId);
   saveState(DEBUG_LOGS_STATE_KEY, debugLogsEnabled ? "true" : "false");
+  saveState(GENERATE_SUPPORT_PACKAGE_STATE_KEY, inputs.generateSupportPackage ? "true" : "false");
 
   if (inputs.waitForReady) {
     await waitForSensorReady(containerId);
   } else {
     log("Skipping Wiz Sensor readiness check (wait-for-ready=false).");
   }
+
+  saveState(SUCCESS_STATE_KEY, "true");
 }
 
 module.exports = {
