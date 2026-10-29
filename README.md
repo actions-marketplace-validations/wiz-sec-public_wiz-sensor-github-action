@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.5
+      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.6
         with:
           token: ${{ secrets.WIZ_SENSOR_TOKEN }}
       # ... your build steps
@@ -40,6 +40,9 @@ The token must be a JSON object with exactly these fields:
 | `install-only` | No | Only pull and cache the Wiz Sensor image without starting it. Defaults to `false`. Useful for pre-warming custom GitHub runner images. |
 | `allow-self-hosted` | No | Allow starting the Wiz Sensor container on a self-hosted runner. Defaults to `false`. |
 | `generate-support-package` | No | Collect a Wiz Sensor support package after the workflow steps finish and upload it as a workflow artifact. Defaults to `false`. |
+| `sensor-registry-url` | No | Container registry hostname for the Wiz Sensor image. Defaults to `wizio.azurecr.io`. Other Wiz registries (e.g. `wizfedramp.azurecr.us` for FedRAMP) are accepted as-is; any non-Wiz registry additionally requires `allow-custom-registry: true`. |
+| `allow-custom-registry` | No | Allow pulling the Wiz Sensor image from a registry that is not a known Wiz registry. Defaults to `false`. |
+| `skip-image-verification` | No | Skip cryptographic verification of the Wiz Sensor image signature before starting it. Defaults to `false`. |
 
 ## Generating a support package
 
@@ -56,7 +59,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.5
+      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.6
         with:
           token: ${{ secrets.WIZ_SENSOR_TOKEN }}
           generate-support-package: true
@@ -86,7 +89,7 @@ jobs:
     runs-on: my-image-generation-runner
     snapshot: my-custom-image
     steps:
-      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.5
+      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.6
         with:
           install-only: true
           token: ${{ secrets.WIZ_SENSOR_TOKEN }}
@@ -102,7 +105,7 @@ jobs:
   build:
     runs-on: my-custom-runner
     steps:
-      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.5
+      - uses: wiz-sec-public/wiz-sensor-github-action@v0.9.6
         with:
           token: ${{ secrets.WIZ_SENSOR_TOKEN }}
       # ... your build steps
@@ -123,6 +126,20 @@ permissions:
 Store the Wiz Sensor token as a GitHub secret and pass it only to this action. Do not expose
 the token to workflows that run untrusted code, such as pull requests from forks.
 
+## Image integrity verification
+
+Wiz signs every sensor image it publishes: a cosign-compatible signature is stored in the
+registry next to the image, and the corresponding public key is available at
+<https://downloads.wiz.io/wiz-verification-key.pub>. Before starting the sensor, the action
+resolves the pulled tag to its immutable digest, verifies the signature for that digest
+against the Wiz public key embedded in the action, and starts the container by digest, so
+the exact bytes that were verified are the bytes that run.
+
+Verification failures never fail your workflow: when the signature cannot be verified (a
+tampered, substituted, or unsigned image, or a problem fetching the signature), the action
+emits a warning, does not start the sensor, and lets the remaining workflow steps run
+without sensor monitoring.
+
 ## Self-hosted runners
 
 By default, this action does not start the sensor container on self-hosted runners. If a
@@ -133,7 +150,7 @@ To explicitly allow the action to start the container on a self-hosted runner, s
 `allow-self-hosted: true`:
 
 ```yaml
-- uses: wiz-sec-public/wiz-sensor-github-action@v0.9.5
+- uses: wiz-sec-public/wiz-sensor-github-action@v0.9.6
   with:
     token: ${{ secrets.WIZ_SENSOR_TOKEN }}
     allow-self-hosted: true
